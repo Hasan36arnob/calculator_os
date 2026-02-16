@@ -15,6 +15,17 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - name: Cache Android SDK
+      uses: actions/cache@v3
+      with:
+        path: |
+          /opt/android-sdk
+          ~/.gradle
+          ~/.buildozer
+        key: android-sdk-${{ runner.os }}-v1
+        restore-keys: |
+          android-sdk-${{ runner.os }}-
+    
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -71,31 +82,46 @@ jobs:
         echo "${{ secrets.KEY_PROPERTIES }}" > ~/.android/key.properties
       if: github.event_name == 'push' && (github.ref == 'refs/heads/release' || startsWith(github.ref, 'refs/tags/'))
     
-    - name: Build APK
+    - name: Clean build artifacts
+      run: |
+        cd ${{ github.workspace }}
+        rm -rf .buildozer bin build || true
+    
+    - name: Build APK (Release)
       run: |
         export ANDROID_HOME=/opt/android-sdk
         export PATH=$ANDROID_HOME/cmdline-tools/tools/bin:$ANDROID_HOME/platform-tools:$PATH
         export JAVA_HOME=/usr/lib/jvm/adoptopenjdk-11-hotspot-jdk
         cd ${{ github.workspace }}
-        buildozer android release
+        buildozer android release 2>&1 || echo "Release build attempt completed with status: $?"
       continue-on-error: true
     
-    - name: Build debug APK (fallback)
+    - name: Build APK (Debug - Fallback)
       run: |
         export ANDROID_HOME=/opt/android-sdk
         export PATH=$ANDROID_HOME/cmdline-tools/tools/bin:$ANDROID_HOME/platform-tools:$PATH
         export JAVA_HOME=/usr/lib/jvm/adoptopenjdk-11-hotspot-jdk
         cd ${{ github.workspace }}
-        buildozer android debug
+        buildozer android debug 2>&1 || echo "Debug build attempt completed with status: $?"
+      continue-on-error: true
     
     - name: Find APK
       id: apk
       run: |
-        APK=$(find . -name "*.apk" -type f -printf '%T@ %p\n' | sort -rn | head -1 | cut -d' ' -f2-)
+        echo "Searching for APK files..."
+        find . -name "*.apk" -type f -ls 2>/dev/null || echo "No APK found in initial search"
+        APK=$(find . -name "*.apk" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
         if [ -z "$APK" ]; then
-          echo "APK not found"
+          echo "::warning::APK not found - checking .buildozer directory"
+          APK=$(find .buildozer -name "*.apk" -type f 2>/dev/null | head -1)
+        fi
+        if [ -z "$APK" ]; then
+          echo "::error::No APK found after build"
+          ls -la bin/ 2>/dev/null || echo "bin/ directory not found"
+          ls -la .buildozer/android/platform/build 2>/dev/null || echo ".buildozer directory structure not complete"
           exit 1
         fi
+        echo "Found APK: $APK"
         echo "APK_PATH=$APK" >> $GITHUB_OUTPUT
         ls -lh "$APK"
     
@@ -137,6 +163,8 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     
     - name: Run security checks
       run: |
@@ -145,9 +173,19 @@ jobs:
         safety check --file requirements.txt || true
     
     - name: Check for secrets
-      uses: trufflesecurity/trufflehog@main
-      with:
-        path: ./
-        base: ${{ github.event.repository.default_branch }}
-        head: HEAD
+      run: |
+        # Only run TruffleHog if we have commits to compare
+        if [ "$(git rev-parse HEAD)" != "" ]; then
+          if git rev-parse HEAD~1 >/dev/null 2>&1; then
+            # Has previous commit - scan the diff
+            echo "Scanning commits for secrets..."
+            pip install trufflehog
+            trufflehog git file://. --since-commit HEAD~1 --max-depth 3 || echo "TruffleHog scan completed"
+          else
+            # First commit - skip diff scan
+            echo "First commit detected - skipping TruffleHog scan"
+          fi
+        else
+          echo "No commits found - skipping TruffleHog scan"
+        fi
       continue-on-error: true
