@@ -100,12 +100,11 @@ jobs:
         rm -rf .buildozer bin build || true
     
     - name: Build APK
-      id: build
       run: |
         export ANDROID_HOME=/opt/android-sdk
         export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
         export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-        
+
         echo "=== Build Environment ==="
         echo "ANDROID_HOME: $ANDROID_HOME"
         echo "JAVA_HOME: $JAVA_HOME"
@@ -113,20 +112,20 @@ jobs:
         echo "Python: $(python --version)"
         echo "Java: $(java -version 2>&1 | head -1)"
         echo ""
-        
+
         cd ${{ github.workspace }}
-        
+
         echo "=== Starting APK build ==="
         buildozer -v android debug 2>&1 | tee build.log
         BUILD_RESULT=$?
-        
+
         if [ $BUILD_RESULT -ne 0 ]; then
           echo "::warning::Build exited with code $BUILD_RESULT"
         fi
-        
+
         echo "=== Searching for APK files ==="
         APK=$(find . -name "*.apk" -type f 2>/dev/null | head -1)
-        
+
         if [ -z "$APK" ]; then
           echo "::error::No APK found!"
           echo ""
@@ -140,13 +139,12 @@ jobs:
           echo ""
           echo "=== .buildozer Structure ==="
           ls -la .buildozer/android/platform/ 2>/dev/null || echo ".buildozer/android/platform/ not found"
-          exit 1
+        else
+          echo "✓ Found APK: $APK"
+          ls -lh "$APK"
+          file "$APK"
         fi
-        
-        echo "✓ Found APK: $APK"
-        echo "APK_PATH=$APK" >> $GITHUB_OUTPUT
-        ls -lh "$APK"
-        file
+
     - name: Find APK
       id: apk
       run: |
