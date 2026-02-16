@@ -67,12 +67,24 @@ jobs:
       run: |
         export ANDROID_HOME=/opt/android-sdk
         mkdir -p $ANDROID_HOME
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/android-tools.zip
-        unzip -q /tmp/android-tools.zip -d $ANDROID_HOME
-        export PATH=$ANDROID_HOME/cmdline-tools/bin:$ANDROID_HOME/cmdline-tools/tools/bin:$PATH
-        yes | sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-31" "build-tools;31.0.0" "ndk;25.2.9519653"
+        mkdir -p $ANDROID_HOME/licenses
+        
+        # Accept licenses
+        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_HOME/licenses/android-sdk-license
+        
+        # Download latest cmdline-tools
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O /tmp/cmdline-tools.zip
+        unzip -q /tmp/cmdline-tools.zip -d $ANDROID_HOME/cmdline-tools/
+        mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+        
+        export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+        
+        echo "Installing Android SDK components..."
+        sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-31" "build-tools;31.0.0" "ndk;25.2.9519653"
+        
+        echo "Android SDK setup complete"
         echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-        echo "$ANDROID_HOME/cmdline-tools/tools/bin:$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+        echo "$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
     
     - name: Create keystore for signing
       run: |
@@ -87,24 +99,50 @@ jobs:
         cd ${{ github.workspace }}
         rm -rf .buildozer bin build || true
     
-    - name: Build APK (Release)
+    - name: Build APK
+      id: build
       run: |
         export ANDROID_HOME=/opt/android-sdk
-        export PATH=$ANDROID_HOME/cmdline-tools/tools/bin:$ANDROID_HOME/platform-tools:$PATH
+        export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
         export JAVA_HOME=/usr/lib/jvm/adoptopenjdk-11-hotspot-jdk
+        
+        echo "=== Build Environment ==="
+        echo "ANDROID_HOME: $ANDROID_HOME"
+        echo "JAVA_HOME: $JAVA_HOME"
+        echo "PATH: $PATH"
+        echo "Python: $(python --version)"
+        echo "Java: $(java -version 2>&1 | head -1)"
+        echo ""
+        
         cd ${{ github.workspace }}
-        buildozer android release 2>&1 || echo "Release build attempt completed with status: $?"
-      continue-on-error: true
-    
-    - name: Build APK (Debug - Fallback)
-      run: |
-        export ANDROID_HOME=/opt/android-sdk
-        export PATH=$ANDROID_HOME/cmdline-tools/tools/bin:$ANDROID_HOME/platform-tools:$PATH
-        export JAVA_HOME=/usr/lib/jvm/adoptopenjdk-11-hotspot-jdk
-        cd ${{ github.workspace }}
-        buildozer android debug 2>&1 || echo "Debug build attempt completed with status: $?"
-      continue-on-error: true
-    
+        
+        echo "=== Starting APK build ==="
+        buildozer -v android debug 2>&1 | tee build.log
+        BUILD_RESULT=$?
+        
+        echo "=== Searching for APK files ==="
+        APK=$(find . -name "*.apk" -type f 2>/dev/null | head -1)
+        
+        if [ -z "$APK" ]; then
+          echo "::error::No APK found!"
+          echo ""
+          echo "=== Directory Structure ==="
+          find . -type d -name "*build*" -o -name "*android*" -o -name "bin" | head -20
+          echo ""
+          echo "=== Buildozer Log (if exists) ==="
+          if [ -f build.log ]; then
+            tail -150 build.log
+          fi
+          echo ""
+          echo "=== .buildozer Structure ==="
+          ls -la .buildozer/android/platform/ 2>/dev/null || echo ".buildozer/android/platform/ not found"
+          exit 1
+        fi
+        
+        echo "✓ Found APK: $APK"
+        echo "APK_PATH=$APK" >> $GITHUB_OUTPUT
+        ls -lh "$APK"
+        file
     - name: Find APK
       id: apk
       run: |
@@ -126,20 +164,47 @@ jobs:
         ls -lh "$APK"
     
     - name: Check APK security
+      if: success()
       run: |
         APK_PATH="${{ steps.apk.outputs.APK_PATH }}"
-        # Verify APK integrity
+        if [ -z "$APK_PATH" ]; then
+          echo "::warning::APK_PATH not set, skipping verification"
+          exit 0
+        fi
         unzip -t "$APK_PATH" > /dev/null
-        echo "APK validation passed"
-        # Get APK info
+        echo "✓ APK is valid"
         file "$APK_PATH"
     
     - name: Upload APK as artifact
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: calculator-apk
         path: ${{ steps.apk.outputs.APK_PATH }}
         retention-days: 30
+        if-no-files-found: warn
+    
+    - name: Build failed - show diagnostics
+      if: failure()
+      run: |
+        echo "=== BUILD FAILED - DIAGNOSTICS ==="
+        echo ""
+        echo "Workspace contents:"
+        ls -la ${{ github.workspace }}
+        echo ""
+        echo "Build log (last 200 lines):"
+        if [ -f build.log ]; then
+          tail -200 build.log
+        else
+          echo "build.log not found"
+        fi
+        echo ""
+        echo ".buildozer status:"
+        ls -la .buildozer 2>/dev/null || echo ".buildozer directory missing"
+        echo ""
+        echo "Python info:"
+        python --version
+        pip list | grep -E "kivy|buildozer|cython"
     
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
