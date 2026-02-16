@@ -17,12 +17,12 @@ jobs:
         with:
           python-version: '3.10'
 
-      # FIX: Updated cache key to 'v4' to force a fresh download
+      # CACHE KEY UPDATE: Changed to 'v5' to force fresh download
       - name: Cache Buildozer
         uses: actions/cache@v3
         with:
           path: .buildozer
-          key: ${{ runner.os }}-buildozer-v4-${{ hashFiles('buildozer.spec') }}
+          key: ${{ runner.os }}-buildozer-v5-${{ hashFiles('buildozer.spec') }}
 
       - name: Install System Dependencies
         run: |
