@@ -17,14 +17,15 @@ jobs:
         with:
           python-version: '3.10'
 
-      # CACHE KEY UPDATE: Changed to 'v5' to force fresh download
+      # Cache Buildozer dependencies
       - name: Cache Buildozer
         uses: actions/cache@v3
         with:
           path: .buildozer
-          key: ${{ runner.os }}-buildozer-v5-${{ hashFiles('buildozer.spec') }}
+          key: ${{ runner.os }}-buildozer-v6-${{ hashFiles('buildozer.spec') }}
 
       - name: Install System Dependencies
+        # Added libltdl-dev (Critical for Python compilation) and libsqlite3-dev
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y \
@@ -40,12 +41,15 @@ jobs:
             automake \
             libtool \
             pkg-config \
-            libncurses-dev
+            libncurses-dev \
+            libltdl-dev \
+            libsqlite3-dev
 
       - name: Install Python Dependencies
+        # Pin setuptools<69 to fix "distutils" errors in Kivy builds
         run: |
           python -m pip install --upgrade pip
-          pip install --upgrade setuptools wheel
+          pip install "setuptools<69" wheel
           pip install -r requirements.txt
 
       - name: Build APK
