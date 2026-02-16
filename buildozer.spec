@@ -8,7 +8,8 @@ version = 1.0.0
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 
-requirements = python3,kivy
+# Specify versions for reproducible builds
+requirements = python3,kivy==2.2.1
 
 orientation = portrait
 fullscreen = 0
@@ -23,7 +24,13 @@ android.archs = arm64-v8a
 android.gradle_options = org.gradle.jvmargs=-Xmx2048m
 android.gradle_dependencies = 
 android.entrypoint = org.kivy.android.PythonActivity
-android.logcat_filters = *:S python:D 
+android.logcat_filters = *:S python:D
+
+# Build settings
+android.add_src = 
+android.add_libs_armeabi_v8a = 
+
+p4a.requirements = python3,kivy
 
 [buildozer]
 

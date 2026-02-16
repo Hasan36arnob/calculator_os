@@ -29,13 +29,16 @@ Config.set('graphics', 'height', '960')
 Config.set('graphics', 'width', '540')
 Config.set('graphics', 'resizable', '0')
 
-# Security: Prevent screenshots on secure devices
-try:
-    from jnius import autoclass
-    PythonActivity = autoclass('org.renpy.android.PythonActivity')
-    print("Mobile environment detected")
-except ImportError:
-    print("Desktop environment")
+# Security: Mobile environment detection moved to runtime
+# (jnius import at module level causes buildozer compilation failure)
+def detect_mobile_environment():
+    """Detect if running on mobile device"""
+    try:
+        from jnius import autoclass
+        PythonActivity = autoclass('org.renpy.android.PythonActivity')
+        return True
+    except ImportError:
+        return False
 
 
 class CalculatorValidator:
