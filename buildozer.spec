@@ -13,15 +13,17 @@ requirements = python3,kivy
 orientation = portrait
 fullscreen = 0
 android.permissions = INTERNET
-android.api = 31
+android.api = 34
 android.minapi = 21
-android.ndk = 25c
+android.ndk = 25.2.9519653
 android.accept_sdk_license = True
 android.archs = arm64-v8a
 
 # Gradle settings for stability
 android.gradle_options = org.gradle.jvmargs=-Xmx2048m
 android.gradle_dependencies = 
+android.entrypoint = org.kivy.android.PythonActivity
+android.logcat_filters = *:S python:D 
 
 [buildozer]
 
