@@ -18,7 +18,7 @@ Before debugging, verify:
 **If no Actions tab visible:**
 ```
 1. Go to repository setting
-2. Actions → General
+2. Actions → Generall
 3. Check "Allow all actions and reusable workflows"
 4. Save
 5. Push new commit - build should start now
