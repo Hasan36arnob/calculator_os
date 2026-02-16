@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Kivy / Buildozer
+.buildozer/
+bin/
+libs/
+*.apk
+
+# Android
+AndroidManifest.xml
+build-*.xml
+proguard-project.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Secrets (NEVER commit)
+*.keystore
+key.properties
+secrets.env
+.env
+
+# Logs
+*.log
+
+# Cache
+.cache/
+*.cache

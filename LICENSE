@@ -1,0 +1,29 @@
+LICENSE - Premium Calculator
+
+Copyright © 2026 Premium Development
+
+All rights reserved.
+
+NO PERMISSION IS GRANTED TO:
+- Copy the source code for redistribution
+- Modify the application without permission
+- Create derivative works
+- Use commercially without authorization
+- Reverse engineer or decompile
+
+PERMITTED USE:
+- Personal, non-commercial use
+- Testing on personal devices
+- Installation on personal Android devices
+
+DISCLAIMER:
+The application is provided "AS IS" without warranty.
+The developer is not liable for any damages or losses.
+
+For licensing inquiries: license@premiumdev.org
+
+---
+
+This software contains components licensed under:
+- Kivy: MIT License
+- Python: PSF License

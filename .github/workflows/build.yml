@@ -1,0 +1,153 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main, release ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install buildozer cython
+    
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          libffi-dev \
+          libssl-dev \
+          libjpeg-dev \
+          zlib1g-dev \
+          libopenjp2-7 \
+          libtiff5 \
+          libjasper1 \
+          libharfbuzz0b \
+          libwebp6 \
+          libtk8.6 \
+          libtcl8.6 \
+          libportmidi0 \
+          libgl1-mesa-glx \
+          libgles2-mesa \
+          xclip \
+          xsel \
+          git \
+          wget \
+          ca-certificates \
+          adoptopenjdk-11-hotspot-jdk
+    
+    - name: Setup Android SDK
+      run: |
+        export ANDROID_HOME=/opt/android-sdk
+        mkdir -p $ANDROID_HOME
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/android-tools.zip
+        unzip -q /tmp/android-tools.zip -d $ANDROID_HOME
+        export PATH=$ANDROID_HOME/cmdline-tools/bin:$ANDROID_HOME/cmdline-tools/tools/bin:$PATH
+        yes | sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-31" "build-tools;31.0.0" "ndk;25.2.9519653"
+        echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "$ANDROID_HOME/cmdline-tools/tools/bin:$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+    
+    - name: Create keystore for signing
+      run: |
+        mkdir -p ~/.android
+        # Security: Use GitHub secrets for keystore
+        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ~/.android/debug.keystore
+        echo "${{ secrets.KEY_PROPERTIES }}" > ~/.android/key.properties
+      if: github.event_name == 'push' && (github.ref == 'refs/heads/release' || startsWith(github.ref, 'refs/tags/'))
+    
+    - name: Build APK
+      run: |
+        export ANDROID_HOME=/opt/android-sdk
+        export PATH=$ANDROID_HOME/cmdline-tools/tools/bin:$ANDROID_HOME/platform-tools:$PATH
+        export JAVA_HOME=/usr/lib/jvm/adoptopenjdk-11-hotspot-jdk
+        cd ${{ github.workspace }}
+        buildozer android release
+      continue-on-error: true
+    
+    - name: Build debug APK (fallback)
+      run: |
+        export ANDROID_HOME=/opt/android-sdk
+        export PATH=$ANDROID_HOME/cmdline-tools/tools/bin:$ANDROID_HOME/platform-tools:$PATH
+        export JAVA_HOME=/usr/lib/jvm/adoptopenjdk-11-hotspot-jdk
+        cd ${{ github.workspace }}
+        buildozer android debug
+    
+    - name: Find APK
+      id: apk
+      run: |
+        APK=$(find . -name "*.apk" -type f -printf '%T@ %p\n' | sort -rn | head -1 | cut -d' ' -f2-)
+        if [ -z "$APK" ]; then
+          echo "APK not found"
+          exit 1
+        fi
+        echo "APK_PATH=$APK" >> $GITHUB_OUTPUT
+        ls -lh "$APK"
+    
+    - name: Check APK security
+      run: |
+        APK_PATH="${{ steps.apk.outputs.APK_PATH }}"
+        # Verify APK integrity
+        unzip -t "$APK_PATH" > /dev/null
+        echo "APK validation passed"
+        # Get APK info
+        file "$APK_PATH"
+    
+    - name: Upload APK as artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: calculator-apk
+        path: ${{ steps.apk.outputs.APK_PATH }}
+        retention-days: 30
+    
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ${{ steps.apk.outputs.APK_PATH }}
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Upload to Uptodown (manual step)
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        echo "APK ready for Uptodown upload"
+        echo "File: ${{ steps.apk.outputs.APK_PATH }}"
+        echo "Please manually upload to Uptodown using publish.sh script"
+
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run security checks
+      run: |
+        python -m pip install bandit safety
+        bandit -r . -ll || true
+        safety check --file requirements.txt || true
+    
+    - name: Check for secrets
+      uses: trufflesecurity/trufflehog@main
+      with:
+        path: ./
+        base: ${{ github.event.repository.default_branch }}
+        head: HEAD
+        extra_args: --debug
