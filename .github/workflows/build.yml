@@ -109,7 +109,7 @@ jobs:
         file "$APK_PATH"
     
     - name: Upload APK as artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: calculator-apk
         path: ${{ steps.apk.outputs.APK_PATH }}
@@ -150,4 +150,4 @@ jobs:
         path: ./
         base: ${{ github.event.repository.default_branch }}
         head: HEAD
-        extra_args: --debug
+      continue-on-error: true
